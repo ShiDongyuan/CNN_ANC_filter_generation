@@ -122,7 +122,7 @@ def Perfect_filter_decompose(filter,Num_cmb,fs=16000):
         else:
             Temper_spectrum[start_index:end_n_index] = Fre_filter[start_index:end_n_index] 
         
-        sub_filters[ii,:] = ifft(Temper_spectrum)
+        sub_filters[ii,:] = ifft(Temper_spectrum).real
     return sub_filters
 
 if __name__=="__main__":
