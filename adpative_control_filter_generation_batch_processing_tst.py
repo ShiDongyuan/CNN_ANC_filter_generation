@@ -6,7 +6,7 @@ import scipy.signal as signal
 import matplotlib.pyplot as plt 
 
 from DFT_filter_decompse import Filter_creating, Perfect_filter_decompose, drawing_group_filter_frequency_timedomian_response
-from Adptive_control_filter_generator import Adaptive_control_filter_generator, train_adaptive_gain_aglrithm
+from Adaptive_control_filter_generator_batch_normal import adaptive_control_filter_batch_normal, train_adaptive_gain_aglrithm_based_batch
 
 #--------------------------------------------------------------------
 # Function : Generating_broadband_noise()
@@ -64,7 +64,8 @@ def additional_noise(signal, snr_db):
     scale            = snr * noise_power / signal_power
     noisy_signal     = signal + additional_noise/scale
     return noisy_signal
-#--------------------------------------------------------------------
+
+#---------------------------------------------------------------------
 if __name__=="__main__":
     c_filter       = 20 
     fs             = 16000
@@ -80,61 +81,21 @@ if __name__=="__main__":
     Noise       = Generating_broadband_noise(low_cutoff_freq, high_cutoff_freq, T, fs)
     Disturbance = signal.lfilter(control_filter,1,Noise)
     Xin         = Converse_from_numpyarray_to_tensor(Noise)
-    Xin         = additional_noise(Xin.unsqueeze(0),90)[0,:]
-    Dis         = Converse_from_numpyarray_to_tensor(Disturbance)
+    Xin         = additional_noise(Xin.unsqueeze(0),90)[0,:].unsqueeze(0)
+    Dis         = Converse_from_numpyarray_to_tensor(Disturbance).unsqueeze(0)
+    Xin2        = torch.cat((Xin,Xin,Xin,Xin,Xin),dim=0)
+    Dis2        = torch.cat((Dis,Dis,Dis,Dis,Dis),dim=0)
     
-    Generator = Adaptive_control_filter_generator(sub_filters_T)
-    error     = train_adaptive_gain_aglrithm(Generator,Xin,Dis,0.01 )
+    # Determind the processor: CUP or GPU 
+    if torch.cuda.is_available():
+        device = "cuda"
+    else:
+        device = "cpu"
+    print(f'<<===This program used {device}====>>')
+    Generator = adaptive_control_filter_batch_normal(sub_filters_T,Batch_size=5, muw=0.01, device=device)
+    error = train_adaptive_gain_aglrithm_based_batch(Generator,Xin2, Dis2, device=device)
     
     plt.plot(error)
     plt.title('The residual error of adaptive gain control')
-    plt.grid()
-    plt.show()
-    
-    wgain = Generator.get_coeffiecients_()
-    wg    = list(wgain.detach().numpy()[0])
-    index = []
-    for i in range(c_filter):
-        index.append('Filter ' +str(i+1))
-    plt.bar(index, wg)
-    plt.grid()
-    plt.show()
-    
-    pre_result                 = wgain.detach().numpy()[0]
-    novel_filter, const_filter, lable_number = Construt_filter_from_labels(sub_filters, pre_result=pre_result)
-    Error                      = Noise_cancellor(novel_filter.squeeze(), Noise, Disturbance)
-    Error1                     = Noise_cancellor(const_filter.squeeze(), Noise, Disturbance)
-    
-    index = np.array(range(len(Noise)))*(1/fs)
-    
-    plt.subplot(2,1,2)
-    lable_num = list(lable_number.squeeze())
-    index_t = []
-    for i in range(c_filter):
-        index_t.append('Filter ' +str(i+1))
-    plt.bar(index_t, lable_num)
-    plt.title('The nosie reduction of the re-constructed filter')
-    plt.grid()
-    
-    plt.subplot(2,1,1)
-    plt.bar(index_t, wg)
-    plt.title('The filter components for the construed filter')
-    plt.grid()
-    plt.show()
-    
-    plt.subplot(3,1,2)
-    plt.plot(index,Disturbance, index,Error)
-    plt.title('The nosie reduction performance of the re-constructed filter')
-    plt.grid()
-    
-    plt.subplot(3,1,1)
-    plt.plot(index,Disturbance, index, Error1)
-    plt.title('The noise reduction performance of the constructed filter')
-    plt.grid()
-    
-    plt.subplot(3,1,3)
-    plt.plot(index[1024:],Error[1024:], index[1024:], Error1[1024:])
-    plt.legend(['Re-construted filter', 'Construted filter'])
-    plt.title('The error signals of the control filters')
     plt.grid()
     plt.show()
